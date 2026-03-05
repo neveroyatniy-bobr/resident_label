@@ -4,12 +4,51 @@ locals @@
 org 100h
 
 start proc
+    call save_screen
     jmp init
 start endp
 
+new_int09 proc
+    push ax
+
+    in al, 60h
+    cmp al, 13h
+    jne @@no_r
+    call hide_show
+    @@no_r:
+
+    pop ax
+
+    db 0eah ; дальний джамп
+    old_int09_off dw 0
+    old_int09_seg dw 0
+new_int09 endp
+
+hide_show proc
+    push ax
+
+    mov al, byte ptr cs:[offset is_hide]
+    cmp al, 0
+    je @@ifshowing
+    call save_screen
+    jmp @@endif
+    @@ifshowing:
+    call load_screen
+    @@endif:
+    not al
+    mov byte ptr cs:[offset is_hide], al
+
+    pop ax
+
+    ret
+hide_show endp
+
 new_int08 proc
+    cmp byte ptr cs:[offset is_hide], 0
+    jne @@hide
     call update_label
     call print_label
+    @@hide:
 
     db 0eah ; дальний джамп
     old_int08_off dw 0
@@ -274,7 +313,9 @@ ip_val: db "| IP = 0000h |"
 elabel: db "+------------+"
 
 screen_buff: db 28*14 dup(0)
-end_scr_buf: db 28 dup(0)        
+end_scr_buf: db 28 dup(0)
+
+is_hide: db 0
 
 end_tsr:
 
@@ -290,7 +331,18 @@ init proc
     mov ax, 2508h
     int 21h 
 
-    mov dx, 1000h
+    mov ax, 3509h
+    int 21h
+    mov word ptr cs:[old_int09_off], bx
+    mov word ptr cs:[old_int09_seg], es
+
+    push cs
+    pop ds
+    mov dx, offset new_int09
+    mov ax, 2509h
+    int 21h
+
+    mov dx, 5000h
     shr dx, 4
     mov ax, 3100h
     int 21h
